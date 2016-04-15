@@ -267,9 +267,11 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
  */
 int trigger_irq(unsigned irq) {
 	unsigned vector;
+	struct irq_desc *desc;
 	for (vector = FIRST_EXTERNAL_VECTOR; vector < NR_VECTORS; vector++) {
-		if (irq == __this_cpu_read(vector_irq[vector]))
-		    goto found;
+		desc = __this_cpu_read(vector_irq[vector]);
+		if (!IS_ERR_OR_NULL(desc) && irq == irq_desc_get_irq(desc))
+			goto found;
 	}
 	return -1;
  found:
