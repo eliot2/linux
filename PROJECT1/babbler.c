@@ -2,7 +2,7 @@
    Email:eliot2@umbc.edu
            
 */
-   
+
 /* 
  * This file uses kernel-doc style comments, which is similar to
  * Javadoc and Doxygen-style comments.  See
@@ -31,13 +31,123 @@
 
 static char *topics_buffer;
 
+/**
+ * babbler_read() - callback invoked when a process reads from
+ * /dev/babbler
+ * @filp: process's file object that is reading from this device (ignored)
+ * @ubuf: destination buffer to store babble
+ * @count: number of bytes in @ubuf
+ * @ppos: file offset (ignored)
+ *
+ * Write to @ubuf the most recent babble, but only if the babble
+ * contains a topic of interest to the caller. Copy the lesser of
+ * @count and babble's length.
+ *
+  * If there are no babbles to be read (or the most recent babble does
+ * not contain any topics of interest), do nothing and return 0.
+ *
+ * Regardless if anything is written to @ubuf or not, always clear the
+ * babble.
+ *
+ * HINT: strstr() may be of use here, but only if your topic and
+ * babble buffers are already null-terminated.
+ *
+ * Return: number of bytes written to @ubuf, or negative on error
+ */
+static ssize_t babbler_read(struct file *filp, char __user * ubuf,
+			    size_t count, loff_t * ppos)
+{
+	return -EPERM;
+}
+
+/**
+ * babbler_write() - callback invoked when a process writes to
+ * /dev/babbler
+ * @filp: process's file object that is writing to this device (ignored)
+ * @ubuf: source buffer of bytes from user
+ * @count: number of bytes in @ubuf
+ * @ppos: file offset (ignored)
+ *
+ * Copy the contents of @ubuf, up to @count bytes, to the current
+ * babble buffer, overwriting any previously stored babble. If @count
+ * is greater than 140, copy only the first 140 characters. Note that
+ * @ubuf is NOT a string; you can NOT use strcpy() or strlen() on it.
+ *
+ * Return: @count, or negative on error
+ */
+static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
+			     size_t count, loff_t * ppos)
+{
+	return -EPERM;
+}
+
+/**
+ * babbler_ctl_write() - callback invoked when a process writes to
+ * /dev/babbler_ctl
+ * @filp: process's file object that is writing to this device (ignored)
+ * @ubuf: source buffer from user
+ * @count: number of bytes in @ubuf
+ * @ppos: file offset (ignored)
+ *
+ * If @ubuf does not begin with an octothorpe, ignore the request and
+ * do nothing; this is not an error.
+ *
+ * Otherwise, copy the contents of @ubuf, up to @count bytes, to the
+ * list of topics of interest. If @count is greater than 8, copy only
+ * the first 8 characters. Note that @ubuf is NOT a string; you can
+ * NOT use strcpy() or strlen() on it.
+ *
+ * Any time the topics of interest changes, update the contents of
+ * topics_buffer. Copy the topics of interest (if any) into the
+ * buffer. The buffer should only contain the topics; all unused bytes
+ * in the buffer should be set to zero.  HINT: memcpy() and memset()
+ * may be of use here.
+ *
+ * Return: @count, or negative on error
+ */
+static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
+				 size_t count, loff_t * ppos)
+{
+	return -EPERM;
+}
+
+/**
+ * babbler_ctl_mmap() - callback invoked when a process mmap()s to
+ * /dev/babbler_ctl
+ * @filp: process's file object that is writing to this device (ignored)
+ * @vma: virtual memory allocation object containing mmap() request
+ *
+ * Create a read-only mapping from kernel memory (specifically,
+ * topics_buffer) into user space.
+ *
+ * You do not need to modify this function.
+ *
+ * Code based upon
+ * http://bloggar.combitech.se/ldc/2015/01/21/mmap-memory-between-kernel-and-userspace/
+ *
+ * Return: 0 on success, negative on error.
+ */
+static int babbler_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+	unsigned long size = (unsigned long)(vma->vm_end - vma->vm_start);
+	unsigned long page = vmalloc_to_pfn(topics_buffer);
+	if (size > PAGE_SIZE)
+		return -EIO;
+	vma->vm_pgoff = 0;
+	vma->vm_page_prot = PAGE_READONLY;
+	if (remap_pfn_range(vma, vma->vm_start, page, size, vma->vm_page_prot))
+		return -EAGAIN;
+
+	return 0;
+}
+
 static const struct file_operations fopsBabble = {
 	.read = &babbler_read,
 	.write = &babbler_write
 };
 
 static const struct file_operations fopsBabbleCtl = {
-	.mmap = &babbler_mmp,
+	.mmap = &babbler_mmap,
 	.write = &babbler_ctl_write
 };
 
@@ -72,116 +182,6 @@ static struct miscdevice babbler_ctl = {
 	NULL,
 	0666
 };
-
-/**
- * babbler_read() - callback invoked when a process reads from
- * /dev/babbler
- * @filp: process's file object that is reading from this device (ignored)
- * @ubuf: destination buffer to store babble
- * @count: number of bytes in @ubuf
- * @ppos: file offset (ignored)
- *
- * Write to @ubuf the most recent babble, but only if the babble
- * contains a topic of interest to the caller. Copy the lesser of
- * @count and babble's length.
- *
-  * If there are no babbles to be read (or the most recent babble does
- * not contain any topics of interest), do nothing and return 0.
- *
- * Regardless if anything is written to @ubuf or not, always clear the
- * babble.
- *
- * HINT: strstr() may be of use here, but only if your topic and
- * babble buffers are already null-terminated.
- *
- * Return: number of bytes written to @ubuf, or negative on error
- */
-static ssize_t babbler_read(struct file *filp, char __user * ubuf,
-			    size_t count, loff_t * ppos)
-{
-  return -EPERM;
-}
-
-/**
- * babbler_write() - callback invoked when a process writes to
- * /dev/babbler
- * @filp: process's file object that is writing to this device (ignored)
- * @ubuf: source buffer of bytes from user
- * @count: number of bytes in @ubuf
- * @ppos: file offset (ignored)
- *
- * Copy the contents of @ubuf, up to @count bytes, to the current
- * babble buffer, overwriting any previously stored babble. If @count
- * is greater than 140, copy only the first 140 characters. Note that
- * @ubuf is NOT a string; you can NOT use strcpy() or strlen() on it.
- *
- * Return: @count, or negative on error
- */
-static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
-			     size_t count, loff_t * ppos)
-{
-  return -EPERM;
-}
-
-/**
- * babbler_ctl_write() - callback invoked when a process writes to
- * /dev/babbler_ctl
- * @filp: process's file object that is writing to this device (ignored)
- * @ubuf: source buffer from user
- * @count: number of bytes in @ubuf
- * @ppos: file offset (ignored)
- *
- * If @ubuf does not begin with an octothorpe, ignore the request and
- * do nothing; this is not an error.
- *
- * Otherwise, copy the contents of @ubuf, up to @count bytes, to the
- * list of topics of interest. If @count is greater than 8, copy only
- * the first 8 characters. Note that @ubuf is NOT a string; you can
- * NOT use strcpy() or strlen() on it.
- *
- * Any time the topics of interest changes, update the contents of
- * topics_buffer. Copy the topics of interest (if any) into the
- * buffer. The buffer should only contain the topics; all unused bytes
- * in the buffer should be set to zero.  HINT: memcpy() and memset()
- * may be of use here.
- *
- * Return: @count, or negative on error
- */
-static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
-				 size_t count, loff_t * ppos)
-{
-  return -EPERM;
-}
-
-/**
- * babbler_ctl_mmap() - callback invoked when a process mmap()s to
- * /dev/babbler_ctl
- * @filp: process's file object that is writing to this device (ignored)
- * @vma: virtual memory allocation object containing mmap() request
- *
- * Create a read-only mapping from kernel memory (specifically,
- * topics_buffer) into user space.
- *
- * You do not need to modify this function.
- *
- * Code based upon
- * http://bloggar.combitech.se/ldc/2015/01/21/mmap-memory-between-kernel-and-userspace/
- *
- * Return: 0 on success, negative on error.
- */
-static int babbler_mmap(struct file *filp, struct vm_area_struct *vma)
-{
-  unsigned long size = (unsigned long)(vma->vm_end - vma->vm_start);
-  unsigned long page = vmalloc_to_pfn(topics_buffer);
-  if (size > PAGE_SIZE)
-    return -EIO;
-  vma->vm_pgoff = 0;
-  vma->vm_page_prot = PAGE_READONLY;
-  if (remap_pfn_range(vma, vma->vm_start, page, size, vma->vm_page_prot))
-    return -EAGAIN;
-
-  return 0;
-}
 
 /**
  * babbler_init() - entry point into the Babbler kernel module
