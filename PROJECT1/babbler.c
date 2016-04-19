@@ -1,9 +1,9 @@
 /* Name: Eliot Carney-Seim
    Email:eliot2@umbc.edu
-   
+           
 */
-
-/*
+   
+/* 
  * This file uses kernel-doc style comments, which is similar to
  * Javadoc and Doxygen-style comments.  See
  * ~/linux/Documentation/kernel-doc-nano-HOWTO.txt for details.
