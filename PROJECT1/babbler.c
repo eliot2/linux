@@ -144,43 +144,27 @@ static int babbler_mmap(struct file *filp, struct vm_area_struct *vma)
 static const struct file_operations fopsBabble = {
 	.read = &babbler_read,
 	.write = &babbler_write
-}
+};
 
 static const struct file_operations fopsBabbleCtl = {
 	.mmap = &babbler_mmap,
 	.write = &babbler_ctl_write
-}
+};
 
-/*
- int minor;
-      const char *name;
-      const struct file_operations *fops;
-      struct list_head list;
-      struct device *parent;
-      struct device *this_device;
-      const char *nodename;
-      mode_t mode;
- */
+struct list_head list = {0};
+
 static struct miscdevice babbler = {
-	MISC_DYNAMIC_MINOR,
-	"babbler",
-	&fopsBabble,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	0666
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "babbler",
+	.fops = &fopsBabble,
+	.mode =	(mode_t)0666
 };
 
 static struct miscdevice babbler_ctl = {
-	MISC_DYNAMIC_MINOR,
-	"babbler_ctl",
-	&fopsBabbleCtl,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	0666
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "babbler_ctl",
+	.fops = &fopsBabbleCtl,
+	.mode = (mode_t)0666
 };
 
 /**
@@ -189,8 +173,8 @@ static struct miscdevice babbler_ctl = {
  */
 static int __init babbler_init(void)
 {
-	misc_register();
-	misc_register();
+	misc_register(&babbler);
+	misc_register(&babbler_ctl);
 	pr_info("Hello, world!\n");
 	return 0;
 }
@@ -200,8 +184,8 @@ static int __init babbler_init(void)
  */
 static void __exit babbler_exit(void)
 {
-	misc_deregister();
-	misc_deregister();
+	misc_deregister(&babbler);
+	misc_deregister(&babbler_ctl);
 	pr_info("Goodbye, world!\n");
 }
 
