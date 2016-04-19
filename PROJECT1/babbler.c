@@ -31,7 +31,47 @@
 
 static char *topics_buffer;
 
-static const struct 
+static const struct file_operations fopsBabble = {
+	.read = &babbler_read,
+	.write = &babbler_write
+};
+
+static const struct file_operations fopsBabbleCtl = {
+	.mmap = &babbler_mmp,
+	.write = &babbler_ctl_write
+};
+
+/*
+ int minor;
+      const char *name;
+      const struct file_operations *fops;
+      struct list_head list;
+      struct device *parent;
+      struct device *this_device;
+      const char *nodename;
+      mode_t mode;
+ */
+static struct miscdevice babbler = {
+	MISC_DYNAMIC_MINOR,
+	"babbler",
+	&fopsBabble,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	0666
+};
+
+static struct miscdevice babbler_ctl = {
+	MISC_DYNAMIC_MINOR,
+	"babbler_ctl",
+	&fopsBabbleCtl,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	0666
+};
 
 /**
  * babbler_read() - callback invoked when a process reads from
@@ -149,6 +189,8 @@ static int babbler_mmap(struct file *filp, struct vm_area_struct *vma)
  */
 static int __init babbler_init(void)
 {
+	misc_register();
+	misc_register();
 	pr_info("Hello, world!\n");
 	return 0;
 }
@@ -158,6 +200,8 @@ static int __init babbler_init(void)
  */
 static void __exit babbler_exit(void)
 {
+	misc_deregister();
+	misc_deregister();
 	pr_info("Goodbye, world!\n");
 }
 
