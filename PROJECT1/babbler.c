@@ -144,12 +144,12 @@ static int babbler_mmap(struct file *filp, struct vm_area_struct *vma)
 static const struct file_operations fopsBabble = {
 	.read = &babbler_read,
 	.write = &babbler_write
-};
+}
 
 static const struct file_operations fopsBabbleCtl = {
 	.mmap = &babbler_mmap,
 	.write = &babbler_ctl_write
-};
+}
 
 /*
  int minor;
