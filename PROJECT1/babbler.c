@@ -136,17 +136,19 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 	   babble_size == 0){
 		pr_info("Topic not found in babble or no topic.\n");
 		memset(BABBLE, 0, 140);
-		return 0;
+		return -1;
+	}else{
+		if(count > BABBLE_LEN)
+			count = BABBLE_LEN;
+	
+		memset(BABBLE, 0, 140);
+		overflow = (int)copy_from_user(BABBLE, ubuf, count);
+		overflow++;overflow--;
+		return babble_size;
 	}
-	if(count > BABBLE_LEN)
-		count = BABBLE_LEN;
 	
 	
-	memset(BABBLE, 0, 140);
-	overflow = (int)copy_from_user(BABBLE, ubuf, count);
-	overflow++;overflow--;
 	
-	return count;
 }
 
 /**
