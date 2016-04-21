@@ -1,6 +1,8 @@
 /* Name: Eliot Carney-Seim
    Email:eliot2@umbc.edu
-           
+   Sources:
+   http://www.makelinux.net/books/lkd2/ch11lev1sec5
+   http://stackoverflow.com/questions/6515227/source-code-example-from-linux-kernel-programming
 */
 
 /* 
@@ -30,6 +32,9 @@
 #include <asm/uaccess.h>
 
 static char *topics_buffer;
+const int BABBLE_LEN = 140;
+const int TOPIC_LEN = 8; 
+static char BABBLE[140];
 
 /**
  * babbler_read() - callback invoked when a process reads from
@@ -57,6 +62,7 @@ static char *topics_buffer;
 static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 			    size_t count, loff_t * ppos)
 {
+	
 	return -EPERM;
 }
 
@@ -78,6 +84,10 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 			     size_t count, loff_t * ppos)
 {
+	if(count > BABBLE_LEN)
+		count = BABBLE_LEN;
+
+	copy_from_user(topics_buffer, ubuf, count);
 	return -EPERM;
 }
 
@@ -108,7 +118,16 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 				 size_t count, loff_t * ppos)
 {
-	return -EPERM;
+	char octo = '#';
+	if(octo != *ubuf)
+		return 0;
+
+	if(count > TOPIC_LEN)
+		count = TOPIC_LEN;
+
+	copy_from_user(topics_buffer, ubuf, count);
+	
+       	return -EPERM;
 }
 
 /**
@@ -151,8 +170,6 @@ static const struct file_operations fopsBabbleCtl = {
 	.write = &babbler_ctl_write
 };
 
-struct list_head list = {0};
-
 static struct miscdevice babbler = {
 	.minor = MISC_DYNAMIC_MINOR,
 	.name = "babbler",
@@ -173,6 +190,11 @@ static struct miscdevice babbler_ctl = {
  */
 static int __init babbler_init(void)
 {
+	topics_buffer = vmalloc(1 * PAGE_SIZE);
+	if(!topics_buffer)
+		kprintf("Failed to allocate memory for 1 Page\n");
+		return -1;
+	
 	misc_register(&babbler);
 	misc_register(&babbler_ctl);
 	pr_info("Hello, world!\n");
@@ -184,6 +206,7 @@ static int __init babbler_init(void)
  */
 static void __exit babbler_exit(void)
 {
+	vfree(topics_buffer);
 	misc_deregister(&babbler);
 	misc_deregister(&babbler_ctl);
 	pr_info("Goodbye, world!\n");
