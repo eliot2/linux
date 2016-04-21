@@ -37,7 +37,8 @@ const int BABBLE_LEN = 140;
 const int TOPIC_LEN = 8; 
 const int BYTE_SIZE = 8;
 static char BABBLE[140];
-
+int writeAmt;
+static int overflow;
 
 /**
  * cpyStr() - No return.
@@ -97,12 +98,12 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	if(strstr(BABBLE, topics_buffer) == NULL || 
 	   babble_size == 0){
 		pr_info("Topic not found in babble or no topic.\n");
-		BABBLE << (BABBLE_LEN * BYTE_SIZE);
+		memset(BABBLE, 0, 140);
 		return 0;
 	}
 	
-	int writeAmt = (babble_size < count) ? babble_size : count;
-	int overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);
+	writeAmt = (babble_size < count) ? babble_size : count;
+	overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);
 	overflow++;overflow--;
 	memset(BABBLE, 0, 140);
 
@@ -132,8 +133,8 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 		count = BABBLE_LEN;
 	babble_size = count;
 	
-	memset(BABBLER, 0, 140);
-	int overflow = (int)copy_from_user(BABBLE, ubuf, count);
+	memset(BABBLE, 0, 140);
+	overflow = (int)copy_from_user(BABBLE, ubuf, count);
 	overflow++;overflow--;
 	
 	return count;
@@ -173,7 +174,7 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 	if(count > TOPIC_LEN)
 		count = TOPIC_LEN;
 
-	int overflow = (int)copy_from_user(topics_buffer, ubuf, count);
+	overflow = (int)copy_from_user(topics_buffer, ubuf, count);
 	overflow++;overflow--;
 	
        	return -EPERM;
@@ -240,9 +241,10 @@ static struct miscdevice babbler_ctl = {
 static int __init babbler_init(void)
 {
 	topics_buffer = (char *)vmalloc(1 * PAGE_SIZE);
-	if(!topics_buffer)
+	if(!topics_buffer){
 		pr_info("Failed to allocate memory for 1 Page\n");
-	return -1;
+		return -1;
+	}
 	
 	misc_register(&babbler);
 	misc_register(&babbler_ctl);
