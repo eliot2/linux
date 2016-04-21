@@ -101,17 +101,17 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	   babble_size == 0){
 		pr_info("Topic not found in babble or no topic.\n");
 		memset(BABBLE, 0, 140);
-		return 0;
+		return count;
 	}
 	
 	writeAmt = (babble_size < count) ? babble_size : count;
-	overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);
-	overflow++;overflow--;
-	memset(BABBLE, 0, 140);
+	overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);overflow++;overflow--;
 
+	memset(BABBLE, 0, 140);
 	babble_size = 0;
+
  	return writeAmt;
- } 
+} 
 
 /**
  * babbler_write() - callback invoked when a process writes to
@@ -131,24 +131,15 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 			     size_t count, loff_t * ppos)
 {
+	if(count > BABBLE_LEN)
+		count = BABBLE_LEN;
+	
 	babble_size = count;
-	if(strstr(ubuf, topics_buffer) == NULL || 
-	   babble_size == 0){
-		pr_info("Topic not found in babble or no topic.\n");
-		memset(BABBLE, 0, 140);
-		return -1;
-	}else{
-		if(count > BABBLE_LEN)
-			count = BABBLE_LEN;
+
+	memset(BABBLE, 0, 140);
+	overflow = (int)copy_from_user(BABBLE, ubuf, count);overflow++;overflow--;
 	
-		memset(BABBLE, 0, 140);
-		overflow = (int)copy_from_user(BABBLE, ubuf, count);
-		overflow++;overflow--;
-		return babble_size;
-	}
-	
-	
-	
+	return babble_size;	
 }
 
 /**
@@ -180,14 +171,14 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 {
 	char octo = '#';
 	if(octo != *ubuf)
-		return 0;
+		return count;
 
 	if(count > TOPIC_LEN)
 		count = TOPIC_LEN;
 
 	memset(topics_buffer, 0, 1 * PAGE_SIZE);
-	overflow = (int)copy_from_user(topics_buffer, ubuf, count);
-	overflow++;overflow--;
+	overflow = (int)copy_from_user(topics_buffer, ubuf, count);overflow++;overflow--;
+	
 	
        	return count;
 }
