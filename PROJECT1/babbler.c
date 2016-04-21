@@ -105,11 +105,12 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	int overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);
 	overflow++;overflow--;
 	memset(BABBLE, 0, 140);
+
 	babble_size = 0;
  	return writeAmt;
  } 
 
-/** 
+/**
  * babbler_write() - callback invoked when a process writes to
  * /dev/babbler
  * @filp: process's file object that is writing to this device (ignored)
@@ -130,11 +131,12 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 	if(count > BABBLE_LEN)
 		count = BABBLE_LEN;
 	babble_size = count;
-
-	BABBLE << (BABBLE_LEN * BYTE_SIZE);
+	
+	memset(BABBLER, 0, 140);
 	int overflow = (int)copy_from_user(BABBLE, ubuf, count);
-overflow++;overflow--;
-	return -EPERM;
+	overflow++;overflow--;
+	
+	return count;
 }
 
 /**
@@ -172,8 +174,8 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 		count = TOPIC_LEN;
 
 	int overflow = (int)copy_from_user(topics_buffer, ubuf, count);
-	int overflow++;
-	int
+	overflow++;overflow--;
+	
        	return -EPERM;
 }
 
