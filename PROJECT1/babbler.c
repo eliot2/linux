@@ -24,7 +24,7 @@
 
 #include <linux/init.h>
 #include <linux/module.h>
-#include <string.h>
+#include <linux/string.h>
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
@@ -49,7 +49,7 @@ static char BABBLE[140];
  * Can copy strings given length control. Smaller 
  * length is copy amount.
  */
-void cpyStr( char *to, char *from, int toLen, int fromLen);
+void cpyStr( char *to, char *from, int toLen, int fromLen){
         int i;
         if(toLen < fromLen){
                 i = toLen;
@@ -102,13 +102,14 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	}
 	
 	int writeAmt = (babble_size < count) ? babble_size : count;
-	copy_to_user(ubuf, BABBLE, writeAmt);
-	BABBLE << (BABBLE_LEN * BYTE_SIZE);
+	int overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);
+	overflow++;overflow--;
+	memset(BABBLE, 0, 140);
 	babble_size = 0;
-	return writeAmt;
-}
+ 	return writeAmt;
+ } 
 
-/**
+/** 
  * babbler_write() - callback invoked when a process writes to
  * /dev/babbler
  * @filp: process's file object that is writing to this device (ignored)
@@ -131,7 +132,8 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 	babble_size = count;
 
 	BABBLE << (BABBLE_LEN * BYTE_SIZE);
-	copy_from_user(BABBLE, ubuf, count);
+	int overflow = (int)copy_from_user(BABBLE, ubuf, count);
+overflow++;overflow--;
 	return -EPERM;
 }
 
@@ -169,8 +171,9 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 	if(count > TOPIC_LEN)
 		count = TOPIC_LEN;
 
-	copy_from_user(topics_buffer, ubuf, count);
-	
+	int overflow = (int)copy_from_user(topics_buffer, ubuf, count);
+	int overflow++;
+	int
        	return -EPERM;
 }
 
@@ -236,8 +239,8 @@ static int __init babbler_init(void)
 {
 	topics_buffer = (char *)vmalloc(1 * PAGE_SIZE);
 	if(!topics_buffer)
-		kprintf("Failed to allocate memory for 1 Page\n");
-		return -1;
+		pr_info("Failed to allocate memory for 1 Page\n");
+	return -1;
 	
 	misc_register(&babbler);
 	misc_register(&babbler_ctl);
