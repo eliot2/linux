@@ -24,7 +24,7 @@
 
 #include <linux/init.h>
 #include <linux/module.h>
-
+#include <string.h>
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
@@ -32,9 +32,36 @@
 #include <asm/uaccess.h>
 
 static char *topics_buffer;
+static int babble_size;
 const int BABBLE_LEN = 140;
 const int TOPIC_LEN = 8; 
+const int BYTE_SIZE = 8;
 static char BABBLE[140];
+
+
+/**
+ * cpyStr() - No return.
+ * @to: cstring to copy to
+ * @from: cstring to copy from
+ * @toLen: length of @to 
+ * @fromLen: length of @from
+ *
+ * Can copy strings given length control. Smaller 
+ * length is copy amount.
+ */
+void cpyStr( char *to, char *from, int toLen, int fromLen);
+        int i;
+        if(toLen < fromLen){
+                i = toLen;
+        }else{
+                i = fromLen;
+        }
+
+        for(; i > 0; i--){
+                to[i-1] = from[i-1];
+        }
+}
+
 
 /**
  * babbler_read() - callback invoked when a process reads from
@@ -48,7 +75,7 @@ static char BABBLE[140];
  * contains a topic of interest to the caller. Copy the lesser of
  * @count and babble's length.
  *
-  * If there are no babbles to be read (or the most recent babble does
+ * If there are no babbles to be read (or the most recent babble does
  * not contain any topics of interest), do nothing and return 0.
  *
  * Regardless if anything is written to @ubuf or not, always clear the
@@ -62,8 +89,23 @@ static char BABBLE[140];
 static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 			    size_t count, loff_t * ppos)
 {
+	/*Testing for topic in babble
+	char inTemp[8];
+	cpyStr(inTemp, topics_buffer, 8, 8);	
+	*/
+
+	if(strstr(BABBLE, topics_buffer) == NULL || 
+	   babble_size == 0){
+		pr_info("Topic not found in babble or no topic.\n");
+		BABBLE << (BABBLE_LEN * BYTE_SIZE);
+		return 0;
+	}
 	
-	return -EPERM;
+	int writeAmt = (babble_size < count) ? babble_size : count;
+	copy_to_user(ubuf, BABBLE, writeAmt);
+	BABBLE << (BABBLE_LEN * BYTE_SIZE);
+	babble_size = 0;
+	return writeAmt;
 }
 
 /**
@@ -86,8 +128,10 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 {
 	if(count > BABBLE_LEN)
 		count = BABBLE_LEN;
+	babble_size = count;
 
-	copy_from_user(topics_buffer, ubuf, count);
+	BABBLE << (BABBLE_LEN * BYTE_SIZE);
+	copy_from_user(BABBLE, ubuf, count);
 	return -EPERM;
 }
 
@@ -190,7 +234,7 @@ static struct miscdevice babbler_ctl = {
  */
 static int __init babbler_init(void)
 {
-	topics_buffer = vmalloc(1 * PAGE_SIZE);
+	topics_buffer = (char *)vmalloc(1 * PAGE_SIZE);
 	if(!topics_buffer)
 		kprintf("Failed to allocate memory for 1 Page\n");
 		return -1;
