@@ -29,6 +29,8 @@
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
+#include <linux/kthread.h>  // for threads
+#include <linux/sched.h>  // for task_struct
 #include <asm/uaccess.h>
 
 static char *topics_buffer;
@@ -39,6 +41,8 @@ const int BYTE_SIZE = 8;
 static char BABBLE[140];
 int writeAmt;
 static int overflow;
+
+static DEFINE_SPINLOCK(g_oMtxInterlock);
 
 /**
  * cpyStr() - No return.
@@ -92,7 +96,6 @@ void cpyStr( char *to, char *from, int toLen, int fromLen){
 static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 			    size_t count, loff_t * ppos)
 {
-
         writeAmt = (babble_size < count) ? babble_size : count;
 	if(strstr(BABBLE, topics_buffer) == NULL || 
 	   babble_size == 0){
@@ -101,11 +104,20 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 		return 0;
 	}
 	
-	
+
+	int ret=0;
+	ret=spin_trylock(&my_lock);
+	if(!ret) {
+		printk(KERN_INFO "Unable to hold lock.");
+		return 0;
+	}
+
+	printk(KERN_INFO "Lock acquired");
 	overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);overflow++;overflow--;
 
 	memset(BABBLE, 0, 140);
 	babble_size = 0;
+	spin_unlock(&my_lock);
 
  	return writeAmt;
 } 
@@ -130,12 +142,20 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 {
 	if(count > BABBLE_LEN)
 		count = BABBLE_LEN;
+
+	int ret=0;
 	
+	ret=spin_trylock(&my_lock);
+	if(!ret) {
+		printk(KERN_INFO "Unable to hold lock");
+		return 0;
+	} 
 	babble_size = count;
 
 	memset(BABBLE, 0, 140);
 	overflow = (int)copy_from_user(BABBLE, ubuf, count);overflow++;overflow--;
-	
+
+	spin_unlock(&my_lock);
 	return babble_size;	
 }
 
@@ -172,6 +192,13 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 
 	if(count > TOPIC_LEN)
 		count = TOPIC_LEN;
+	int ret=0;
+	
+	ret=spin_trylock(&my_lock);
+	if(!ret) {
+		printk(KERN_INFO "Unable to hold lock.");
+		return 0;
+	}
 
 	memset(topics_buffer, 0, 1 * PAGE_SIZE);
 	overflow = (int)copy_from_user(topics_buffer, ubuf, count);overflow++;overflow--;
