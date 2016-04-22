@@ -92,19 +92,16 @@ void cpyStr( char *to, char *from, int toLen, int fromLen){
 static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 			    size_t count, loff_t * ppos)
 {
-	/*Testing for topic in babble
-	char inTemp[8];
-	cpyStr(inTemp, topics_buffer, 8, 8);	
-	*/
 
+        writeAmt = (babble_size < count) ? babble_size : count;
 	if(strstr(BABBLE, topics_buffer) == NULL || 
 	   babble_size == 0){
 		pr_info("Topic not found in babble or no topic.\n");
 		memset(BABBLE, 0, 140);
-		return count;
+		return 0;
 	}
 	
-	writeAmt = (babble_size < count) ? babble_size : count;
+	
 	overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);overflow++;overflow--;
 
 	memset(BABBLE, 0, 140);
@@ -244,10 +241,12 @@ static struct miscdevice babbler_ctl = {
 static int __init babbler_init(void)
 {
 	topics_buffer = (char *)vmalloc(1 * PAGE_SIZE);
+	babble_size = 0;
 	if(!topics_buffer){
 		pr_info("Failed to allocate memory for 1 Page\n");
 		return -1;
 	}
+	
 	
 	misc_register(&babbler);
 	misc_register(&babbler_ctl);
