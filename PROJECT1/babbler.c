@@ -41,8 +41,9 @@ const int BYTE_SIZE = 8;
 static char BABBLE[140];
 int writeAmt;
 static int overflow;
+static int ret;
 
-static DEFINE_SPINLOCK(g_oMtxInterlock);
+static DEFINE_SPINLOCK(my_lock);
 
 /**
  * cpyStr() - No return.
@@ -105,7 +106,7 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	}
 	
 
-	int ret=0;
+	ret=0;
 	ret=spin_trylock(&my_lock);
 	if(!ret) {
 		printk(KERN_INFO "Unable to hold lock.");
@@ -143,7 +144,7 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 	if(count > BABBLE_LEN)
 		count = BABBLE_LEN;
 
-	int ret=0;
+	ret=0;
 	
 	ret=spin_trylock(&my_lock);
 	if(!ret) {
@@ -192,8 +193,8 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 
 	if(count > TOPIC_LEN)
 		count = TOPIC_LEN;
-	int ret=0;
 	
+	ret=0;	
 	ret=spin_trylock(&my_lock);
 	if(!ret) {
 		printk(KERN_INFO "Unable to hold lock.");
@@ -203,7 +204,7 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 	memset(topics_buffer, 0, 1 * PAGE_SIZE);
 	overflow = (int)copy_from_user(topics_buffer, ubuf, count);overflow++;overflow--;
 	
-	
+	spin_unlock(&my_lock);	
        	return count;
 }
 
