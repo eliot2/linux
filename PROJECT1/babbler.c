@@ -29,14 +29,14 @@
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
-#include <linux/kthread.h>  // for threads
-#include <linux/sched.h>  // for task_struct
+#include <linux/kthread.h>	// for threads
+#include <linux/sched.h>	// for task_struct
 #include <asm/uaccess.h>
 
 static char *topics_buffer;
 static int babble_size;
 const int BABBLE_LEN = 140;
-const int TOPIC_LEN = 8; 
+const int TOPIC_LEN = 8;
 const int BYTE_SIZE = 8;
 static char BABBLE[140];
 int writeAmt;
@@ -55,21 +55,19 @@ static DEFINE_SPINLOCK(my_lock);
  * Can copy strings given length control. Smaller 
  * length is copy amount.
  */
-void cpyStr( char *to, char *from, int toLen, int fromLen){
-        int i;
-        if(toLen < fromLen){
-                i = toLen;
-        }else{
-                i = fromLen;
-        }
+void cpyStr(char *to, char *from, int toLen, int fromLen)
+{
+	int i;
+	if (toLen < fromLen) {
+		i = toLen;
+	} else {
+		i = fromLen;
+	}
 
-        for(; i > 0; i--){
-                to[i-1] = from[i-1];
-        }
+	for (; i > 0; i--) {
+		to[i - 1] = from[i - 1];
+	}
 }
-
-
-
 
 /**
  * babbler_read() - callback invoked when a process reads from
@@ -97,31 +95,31 @@ void cpyStr( char *to, char *from, int toLen, int fromLen){
 static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 			    size_t count, loff_t * ppos)
 {
-        writeAmt = (babble_size < count) ? babble_size : count;
-	if(strstr(BABBLE, topics_buffer) == NULL || 
-	   babble_size == 0){
+	writeAmt = (babble_size < count) ? babble_size : count;
+	if (strstr(BABBLE, topics_buffer) == NULL || babble_size == 0) {
 		pr_info("Topic not found in babble or no topic.\n");
 		memset(BABBLE, 0, 140);
 		return 0;
 	}
-	
 
-	ret=0;
-	ret=spin_trylock(&my_lock);
-	if(!ret) {
+	ret = 0;
+	ret = spin_trylock(&my_lock);
+	if (!ret) {
 		printk(KERN_INFO "Unable to hold lock.");
 		return 0;
 	}
 
 	printk(KERN_INFO "Lock acquired");
-	overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);overflow++;overflow--;
+	overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);
+	overflow++;
+	overflow--;
 
 	memset(BABBLE, 0, 140);
 	babble_size = 0;
 	spin_unlock(&my_lock);
 
- 	return writeAmt;
-} 
+	return writeAmt;
+}
 
 /**
  * babbler_write() - callback invoked when a process writes to
@@ -141,23 +139,25 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 			     size_t count, loff_t * ppos)
 {
-	if(count > BABBLE_LEN)
+	if (count > BABBLE_LEN)
 		count = BABBLE_LEN;
 
-	ret=0;
-	
-	ret=spin_trylock(&my_lock);
-	if(!ret) {
+	ret = 0;
+
+	ret = spin_trylock(&my_lock);
+	if (!ret) {
 		printk(KERN_INFO "Unable to hold lock");
 		return 0;
-	} 
+	}
 	babble_size = count;
 
 	memset(BABBLE, 0, 140);
-	overflow = (int)copy_from_user(BABBLE, ubuf, count);overflow++;overflow--;
+	overflow = (int)copy_from_user(BABBLE, ubuf, count);
+	overflow++;
+	overflow--;
 
 	spin_unlock(&my_lock);
-	return babble_size;	
+	return babble_size;
 }
 
 /**
@@ -188,24 +188,26 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 				 size_t count, loff_t * ppos)
 {
 	char octo = '#';
-	if(octo != *ubuf)
+	if (octo != *ubuf)
 		return count;
 
-	if(count > TOPIC_LEN)
+	if (count > TOPIC_LEN)
 		count = TOPIC_LEN;
-	
-	ret=0;	
-	ret=spin_trylock(&my_lock);
-	if(!ret) {
+
+	ret = 0;
+	ret = spin_trylock(&my_lock);
+	if (!ret) {
 		printk(KERN_INFO "Unable to hold lock.");
 		return 0;
 	}
 
 	memset(topics_buffer, 0, 1 * PAGE_SIZE);
-	overflow = (int)copy_from_user(topics_buffer, ubuf, count);overflow++;overflow--;
-	
-	spin_unlock(&my_lock);	
-       	return count;
+	overflow = (int)copy_from_user(topics_buffer, ubuf, count);
+	overflow++;
+	overflow--;
+
+	spin_unlock(&my_lock);
+	return count;
 }
 
 /**
@@ -252,14 +254,14 @@ static struct miscdevice babbler = {
 	.minor = MISC_DYNAMIC_MINOR,
 	.name = "babbler",
 	.fops = &fopsBabble,
-	.mode =	(mode_t)0666
+	.mode = (mode_t) 0666
 };
 
 static struct miscdevice babbler_ctl = {
 	.minor = MISC_DYNAMIC_MINOR,
 	.name = "babbler_ctl",
 	.fops = &fopsBabbleCtl,
-	.mode = (mode_t)0666
+	.mode = (mode_t) 0666
 };
 
 /**
@@ -270,12 +272,11 @@ static int __init babbler_init(void)
 {
 	topics_buffer = (char *)vmalloc(1 * PAGE_SIZE);
 	babble_size = 0;
-	if(!topics_buffer){
+	if (!topics_buffer) {
 		pr_info("Failed to allocate memory for 1 Page\n");
 		return -1;
 	}
-	
-	
+
 	misc_register(&babbler);
 	misc_register(&babbler_ctl);
 	pr_info("Hello, world!\n");
