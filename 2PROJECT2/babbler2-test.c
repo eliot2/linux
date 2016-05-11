@@ -5,6 +5,7 @@
 
 #define _POSIX_SOURCE
 
+#include <pthread.h>
 #include <errno.h>
 #include <netdb.h>
 #include <stdbool.h>
@@ -55,6 +56,26 @@
   } \
   } while(0);
 
+int fd1;
+int fd2;
+unsigned test_passed = 0;
+unsigned test_failed = 0;
+int err;
+ 
+/*This function is intenionally racist, to test RC on Babbler/(-ctl)*/
+static void *makeBabblerWrites(void *toWrite)
+{
+	err = write(fd1, toWrite, 140);
+	if(err < 0 || err != 140){
+		printf("Error RC-Babbler Writing. Err: %d\n", err);
+		CHECK_IS_EQUAL(0, 1);
+	}else{
+		printf("I am a thread writing: %s\n", (char *)toWrite);		
+	}
+	return NULL;
+}
+
+
 static int babblenet_socket = -1;
 
 
@@ -98,6 +119,17 @@ static void init_babblenet_connection(void)
 		fprintf(stderr, "Could not connect to BabbleNet\n");
 		exit(EXIT_FAILURE);
 	}
+}
+
+/*This function is intenionally racist, to test RC on Babbler/(-ctl)*/
+static void *makeCtlWrites(void *toWrite)
+{
+	int err = write(fd2, toWrite, 8);
+	if(err < 0 || err != 140){
+		printf("Error RC-Ctl Writing.\n");
+		CHECK_IS_EQUAL(0, 1);
+	}
+	return NULL;
 }
 
 /**
@@ -148,11 +180,11 @@ int main(void) {
  
 	printf("Test 1: Test opening babbler!\n");	
 	//Open file
-	int fd1 = open(babbleFile, O_RDWR, S_IRUSR | S_IWUSR);
+	fd1 = open(babbleFile, O_RDWR, S_IRUSR | S_IWUSR);
 	CHECK_IS_NOT_EQUAL(fd1, -1);
 
 	printf("Test 2: Test opening READ-ONLYbabbler-ctl\n");
-	int fd2 = open(topicFile, O_RDONLY, S_IRUSR);
+	fd2 = open(topicFile, O_RDONLY, S_IRUSR);
 	CHECK_IS_NOT_EQUAL(fd2, -1);
 
 	printf("Test 3: Test MMAP ret on Babbler\n");
@@ -169,21 +201,71 @@ int main(void) {
 
 	printf("Test 5: Test Read from Babble-ctl\n");
 	char* tmpStr = (char *)mmappedData2;
-        CHECK_IS_EQUAL("#cs421", tmpStr); 
+	char* topicStr = "#cs421";
+    CHECK_IS_EQUAL(0, strcmp(tmpStr, topicStr));
+	printf("Read from Topic is: %s\n", tmpStr);
         //Above assumed "echo -n '#cs421'" command was given. 
 
 	printf("Test 6: Test Write to Babbler\n");
-	char *cpyRet = write(fd1, "I <3 #cs421", 11);
-	CHECK_IS_EQUAL(cpyRet, mmappedData1);
-	
-        printf("Test 7: Test too much write to babbler\n");
+	size_t writeRet = write(fd1, "I <3 #cs421", 11);	
+	CHECK_IS_EQUAL((int)writeRet, 11);
+
+	printf("Test 7: Test Read from Babbler\n");
+	char readBabbler[140];
+	size_t readRet = read(fd1, readBabbler, 140);	
+	CHECK_IS_EQUAL((int)readRet, 11);	
+	printf("readBabbler is: %s\n", readBabbler);
+
+
+	printf("Test 8: Test too much write to babbler\n");
 	char * BIG_STRING = "SHGVDHASGVDHGSVDSHGVSDHASDHGVSHGDVSHJDVASDDHGSAVDHSAVDHGSAVDHGSVDHASVDHSVHGDSVHGDASVSHDVHGSAVDHSAVFHDV FHGSDVDHSVDHGSVDHGASVDGJASVDJSVJDVASDFSAVFDSVFHDGVFJDSVFDGHVFDHGVFJVFDSGHVFDJV #cs421";
-	cpyRet = strcpy(mmappedData1, BIG_STRING);
-	CHECK_IS_EQUAL(cpyRet, mmappedData1);
+	writeRet = write(fd1, BIG_STRING, 188);
+	CHECK_IS_NOT_EQUAL(writeRet, 188);
 	
-	printf("Test 8: Test EDGECASE: Read from Babble, post BIG STRING\n");
-	tmpStr = (char *)mmappedData1;
-        CHECK_IS_EQUAL(BIG_STRING, tmpStr); 
+	printf("Test 9: Test EDGECASE: Read from Babble, post BIG STRING\n");
+	char data[189];
+	err = read(fd1, data, 188);
+	if(err < 0){
+		printf("Error in read.\n");
+		CHECK_IS_EQUAL(0, 1);
+	}	
+	data[188] = '\0';
+        CHECK_IS_NOT_EQUAL(0, strcmp(BIG_STRING, data)); 
+
+	printf("Test 10: Test Race Condition: Writing to Babbler\n");
+	/*generating test variables*/
+	char * a_write = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#cs421";
+	char * b_write = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#cs421";
+	char * c_write = "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc#cs421";
+	pthread_t writeThreads [3];
+	char * writeContent [3] = {a_write, b_write, c_write};
+	for(size_t i = 0; i < 1; i++){
+		pthread_create(writeThreads + i, NULL, 
+			       makeBabblerWrites, writeContent[i]);
+	}
+	for(size_t i = 0; i < 1; i++){
+		pthread_join(writeThreads[i], NULL);
+	}
+
+	char babblerContent[140];
+	err = read(fd1, babblerContent, 140);
+	babblerContent[139] = '\0'; 
+	if(err < 0 || err != 140){
+		printf("Error reading Babbler. Err: %d\n", err);
+		CHECK_IS_EQUAL(0, 1);
+	}else{
+		printf("Read Content from Babbler is: %s\n", babblerContent);
+	}
+	
+	int totalFails = 0;
+	if(strcmp(a_write, babblerContent) != 0)
+		totalFails++;
+	if(strcmp(b_write, babblerContent) != 0)
+		totalFails++;
+	if(strcmp(b_write, babblerContent) != 0)
+		totalFails++;
+	if(totalFails == 3)
+		CHECK_IS_EQUAL(0, 1); 
 
 	//Cleanup
 	int rc1 = munmap(mmappedData1, 140);rc1++;rc1--;

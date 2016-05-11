@@ -52,6 +52,7 @@ static char BABBLE[140];
 int writeAmt;
 static int overflow;
 static int ret;
+int err;
  
 static DEFINE_SPINLOCK(my_lock);
 
@@ -311,6 +312,41 @@ static struct miscdevice babbler_ctl_dev = {
 };
 
 /**
+ * babblenet_top() - top-half of BabbleNet ISR
+ * @irq: IRQ that was invoked (ignored)
+ * @cookie: Pointer to data that was passed into
+ * request_threaded_irq() (ignored)
+ *
+ * If @irq is BABBLENET_IRQ, then wake up the bottom-half. Otherwise,
+ * return IRQ_NONE.
+ */
+static irqreturn_t babblenet_top(int irq, void *cookie){
+	return IRQ_WAKE_THREAD;
+}
+
+/**
+ * babblenet_bottom() - bottom-half to BabbleNet ISR
+ * @irq: IRQ that was invoked (ignore)
+ * @cookie: Pointer that was passed into request_threaded_irq()
+ * (ignored)
+ *
+ * Fetch the incoming packet, via babblenet_get_babble(), and
+ * overwrite any previously stored babble. As per babbler_write(),
+ * truncate the payload to the first 140 characters. Remember to add
+ * appropriate spin lock calls in this function.
+ *
+ * Note that the incoming payload is NOT a string; you can NOT use
+ * strcpy() or strlen() on it.
+ *
+ * Return: always IRQ_HANDLED
+ */
+static irqreturn_t babblenet_bottom(int irq, void *cookie){
+
+	return IRQ_HANDLED;
+
+}
+
+/**
  * babbler_init() - entry point into the Babbler kernel driver
  * Return: 0 on successful initialization, negative on error
  */
@@ -339,14 +375,13 @@ static int __init babbler_init(void)
 	/*
 	 * In part 2, register ISR and enable network integration.
 	 */
-	const char *babble_name = "babble_IRQ";
-
-	int err =  request_threaded_irq(BABBLENET_IRQ,
-					babblenet_top,
-					babblenet_bottom,
-					0,
-					babble_name
-					NULL);
+	
+	err =  request_threaded_irq(BABBLENET_IRQ,
+				    babblenet_top,
+				    babblenet_bottom,
+				    0,
+				    "babble_IRQ",
+				    NULL);
 	if(err){
 		printk("Could not assign device IRQ at %d", BABBLENET_IRQ);
 		free_irq(BABBLENET_IRQ, NULL);
@@ -380,35 +415,6 @@ static void __exit babbler_exit(void)
 	misc_deregister(&babbler_dev);
 	vfree(topics_buffer);
 }
-
-/**
- * babblenet_top() - top-half of BabbleNet ISR
- * @irq: IRQ that was invoked (ignored)
- * @cookie: Pointer to data that was passed into
- * request_threaded_irq() (ignored)
- *
- * If @irq is BABBLENET_IRQ, then wake up the bottom-half. Otherwise,
- * return IRQ_NONE.
- */
-static irqreturn_t babblenet_top(int irq, void *cookie);
-
-/**
- * babblenet_bottom() - bottom-half to BabbleNet ISR
- * @irq: IRQ that was invoked (ignore)
- * @cookie: Pointer that was passed into request_threaded_irq()
- * (ignored)
- *
- * Fetch the incoming packet, via babblenet_get_babble(), and
- * overwrite any previously stored babble. As per babbler_write(),
- * truncate the payload to the first 140 characters. Remember to add
- * appropriate spin lock calls in this function.
- *
- * Note that the incoming payload is NOT a string; you can NOT use
- * strcpy() or strlen() on it.
- *
- * Return: always IRQ_HANDLED
- */
-static irqreturn_t babblenet_bottom(int irq, void *cookie);
 
 
 module_init(babbler_init);

@@ -42,6 +42,7 @@ static char BABBLE[140];
 int writeAmt;
 static int overflow;
 static int ret;
+int attempts;
 
 static DEFINE_SPINLOCK(my_lock);
 
@@ -103,13 +104,20 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	}
 
 	ret = 0;
-	ret = spin_trylock(&my_lock);
+
+
+	while(!ret){
+		attempts++;
+		ret = spin_trylock(&my_lock);
+	}
+	
 	if (!ret) {
 		printk(KERN_INFO "Unable to hold lock.");
 		return 0;
 	}
 
-	printk(KERN_INFO "Lock acquired");
+	printk("Lock Acquired; Attempts: %d\n", attempts);attempts = 0;
+
 	overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);
 	overflow++;
 	overflow--;
@@ -144,11 +152,16 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 
 	ret = 0;
 
-	ret = spin_trylock(&my_lock);
+
+	while(!ret){
+		attempts++;
+		ret = spin_trylock(&my_lock);
+	}
 	if (!ret) {
 		printk(KERN_INFO "Unable to hold lock");
 		return 0;
 	}
+	printk("Lock Acquired; Attempts: %d\n", attempts);attempts = 0;
 	babble_size = count;
 
 	memset(BABBLE, 0, 140);
@@ -195,12 +208,20 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 		count = TOPIC_LEN;
 
 	ret = 0;
-	ret = spin_trylock(&my_lock);
+
+
+	while(!ret){
+		attempts++;
+		ret = spin_trylock(&my_lock);
+	}
+
 	if (!ret) {
 		printk(KERN_INFO "Unable to hold lock.");
 		return 0;
 	}
 
+	printk("Lock Acquired; Attempts: %d\n", attempts);attempts = 0;
+	
 	memset(topics_buffer, 0, 1 * PAGE_SIZE);
 	overflow = (int)copy_from_user(topics_buffer, ubuf, count);
 	overflow++;
