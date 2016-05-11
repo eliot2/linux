@@ -29,8 +29,8 @@
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
-#include <linux/kthread.h>	// for threads
-#include <linux/sched.h>	// for task_struct
+#include <linux/kthread.h>	/* for threads*/
+#include <linux/sched.h>        /* for task_struct*/
 #include <asm/uaccess.h>
 
 static char *topics_buffer;
@@ -38,7 +38,7 @@ static int babble_size;
 const int BABBLE_LEN = 140;
 const int TOPIC_LEN = 8;
 const int BYTE_SIZE = 8;
-static char BABBLE[140];
+static char *BABBLE;
 int writeAmt;
 static int overflow;
 static int ret;
@@ -99,7 +99,7 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	writeAmt = (babble_size < count) ? babble_size : count;
 	if (strstr(BABBLE, topics_buffer) == NULL || babble_size == 0) {
 		pr_info("Topic not found in babble or no topic.\n");
-		memset(BABBLE, 0, 140);
+		memset(BABBLE, 0, BABBLE_LEN);
 		return 0;
 	}
 
@@ -122,7 +122,7 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	overflow++;
 	overflow--;
 
-	memset(BABBLE, 0, 140);
+	memset(BABBLE, 0, BABBLE_LEN);
 	babble_size = 0;
 	spin_unlock(&my_lock);
 
@@ -164,7 +164,7 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 	printk("Lock Acquired; Attempts: %d\n", attempts);attempts = 0;
 	babble_size = count;
 
-	memset(BABBLE, 0, 140);
+	memset(BABBLE, 0, BABBLE_LEN);
 	overflow = (int)copy_from_user(BABBLE, ubuf, count);
 	overflow++;
 	overflow--;
@@ -204,11 +204,11 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 	if (octo != *ubuf)
 		return count;
 
+
 	if (count > TOPIC_LEN)
 		count = TOPIC_LEN;
 
 	ret = 0;
-
 
 	while(!ret){
 		attempts++;
@@ -222,7 +222,7 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 
 	printk("Lock Acquired; Attempts: %d\n", attempts);attempts = 0;
 	
-	memset(topics_buffer, 0, 1 * PAGE_SIZE);
+	memset(topics_buffer, 0, TOPIC_LEN);
 	overflow = (int)copy_from_user(topics_buffer, ubuf, count);
 	overflow++;
 	overflow--;
@@ -292,9 +292,20 @@ static struct miscdevice babbler_ctl = {
 static int __init babbler_init(void)
 {
 	topics_buffer = (char *)vmalloc(1 * PAGE_SIZE);
+	topics_buffer[9] = '\0';
+	BABBLE = (char *)vmalloc(1 * PAGE_SIZE);
+	BABBLE[140] = '\0';
+	
+	memset(topics_buffer, 0, TOPIC_LEN);
+	memset(BABBLE, 0, 1 * BABBLE_LEN);
+	
 	babble_size = 0;
 	if (!topics_buffer) {
-		pr_info("Failed to allocate memory for 1 Page\n");
+		pr_info("Failed to allocate memory for 1 topics Page\n");
+		return -1;
+	}
+	if (!BABBLE) {
+		pr_info("Failed to allocate memory for 1 BABBLE Page\n");
 		return -1;
 	}
 
@@ -310,6 +321,7 @@ static int __init babbler_init(void)
 static void __exit babbler_exit(void)
 {
 	vfree(topics_buffer);
+	vfree(BABBLE);
 	misc_deregister(&babbler);
 	misc_deregister(&babbler_ctl);
 	pr_info("Goodbye, world!\n");
