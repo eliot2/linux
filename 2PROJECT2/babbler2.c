@@ -36,8 +36,8 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
-#include <linux/kthread.h>	// for threads
-#include <linux/sched.h>	// for task_struct
+#include <linux/kthread.h>	/* for threads */
+#include <linux/sched.h>	/* for task_struct */
 #include <asm/uaccess.h>
 
 #define MAX_TOPIC_LEN 8
@@ -48,12 +48,13 @@ static int babble_size;
 const int BABBLE_LEN = 140;
 const int TOPIC_LEN = 8;
 const int BYTE_SIZE = 8;
-static char BABBLE[140];
+static char *BABBLE;
 int writeAmt;
 static int overflow;
 static int ret;
+int attempts;
 int err;
- 
+
 static DEFINE_SPINLOCK(my_lock);
 
 /**
@@ -66,7 +67,7 @@ static DEFINE_SPINLOCK(my_lock);
  * Can copy strings given length control. Smaller 
  * length is copy amount.
  */
-void cpyStr(char *to, char *from, int toLen, int fromLen)
+void cpyStr(char *to, char const *from, int toLen, int fromLen)
 {
 	int i;
 	if (toLen < fromLen) {
@@ -91,10 +92,7 @@ extern const char *babblenet_get_babble(size_t * const);
 /**
  * babbler_read() - callback invoked when a process reads from
  * /dev/babbler
- * @filp: process's file object that is reading from this device (ignored)
  * @ubuf: destination to store babble
- * @count: number of bytes in @ubuf
- * @ppos: file offset (ignored)
  *
  * If the most recent babble begins with an '@' character followed by
  * an integer, the babble is requesting privacy. If the calling uid
@@ -132,7 +130,7 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	writeAmt = (babble_size < count) ? babble_size : count;
 	if (strstr(BABBLE, topics_buffer) == NULL || babble_size == 0) {
 		pr_info("Topic not found in babble or no topic.\n");
-		memset(BABBLE, 0, 140);
+		memset(BABBLE, 0, BABBLE_LEN);
 		return 0;
 	}
 
@@ -142,19 +140,25 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	 */
 	/* YOUR CODE HERE */
 	ret = 0;
-	ret = spin_trylock(&my_lock);
+
+	while (!ret) {
+		attempts++;
+		ret = spin_trylock(&my_lock);
+	}
+
 	if (!ret) {
 		printk(KERN_INFO "Unable to hold lock.");
 		return 0;
 	}
 
-	return count;
-	printk(KERN_INFO "Lock acquired");
+	printk("Lock Acquired; Attempts: %d\n", attempts);
+	attempts = 0;
+
 	overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);
 	overflow++;
 	overflow--;
 
-	memset(BABBLE, 0, 140);
+	memset(BABBLE, 0, BABBLE_LEN);
 	babble_size = 0;
 	spin_unlock(&my_lock);
 
@@ -162,12 +166,10 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 }
 
 /**
- * babbler_write() - callback invoked when a process writes to
+ * babbler_write() - helper invoked when a process writes to
  * /dev/babbler
- * @filp: process's file object that is writing to this device (ignored)
  * @ubuf: source buffer of bytes from user
  * @count: number of bytes in @ubuf
- * @ppos: file offset (ignored)
  *
  * Copy the contents of @ubuf, up to @count bytes, to the current
  * babble buffer, overwriting any previously stored babbles. If @count
@@ -184,14 +186,20 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 
 	ret = 0;
 
-	ret = spin_trylock(&my_lock);
+	while (!ret) {
+		attempts++;
+		ret = spin_trylock(&my_lock);
+	}
 	if (!ret) {
 		printk(KERN_INFO "Unable to hold lock");
 		return 0;
 	}
+
+	printk("Lock Acquired; Attempts: %d\n", attempts);
+	attempts = 0;
 	babble_size = count;
 
-	memset(BABBLE, 0, 140);
+	memset(BABBLE, 0, BABBLE_LEN);
 	overflow = (int)copy_from_user(BABBLE, ubuf, count);
 	overflow++;
 	overflow--;
@@ -242,13 +250,21 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 		count = TOPIC_LEN;
 
 	ret = 0;
-	ret = spin_trylock(&my_lock);
+
+	while (!ret) {
+		attempts++;
+		ret = spin_trylock(&my_lock);
+	}
+
 	if (!ret) {
 		printk(KERN_INFO "Unable to hold lock.");
 		return 0;
 	}
 
-	memset(topics_buffer, 0, 1 * PAGE_SIZE);
+	printk("Lock Acquired; Attempts: %d\n", attempts);
+	attempts = 0;
+
+	memset(topics_buffer, 0, TOPIC_LEN);
 	overflow = (int)copy_from_user(topics_buffer, ubuf, count);
 	overflow++;
 	overflow--;
@@ -320,8 +336,12 @@ static struct miscdevice babbler_ctl_dev = {
  * If @irq is BABBLENET_IRQ, then wake up the bottom-half. Otherwise,
  * return IRQ_NONE.
  */
-static irqreturn_t babblenet_top(int irq, void *cookie){
-	return IRQ_WAKE_THREAD;
+static irqreturn_t babblenet_top(int irq, void *cookie)
+{
+	if (irq == BABBLENET_IRQ)
+		return IRQ_WAKE_THREAD;
+	else
+		return IRQ_NONE;
 }
 
 /**
@@ -340,26 +360,65 @@ static irqreturn_t babblenet_top(int irq, void *cookie){
  *
  * Return: always IRQ_HANDLED
  */
-static irqreturn_t babblenet_bottom(int irq, void *cookie){
+static irqreturn_t babblenet_bottom(int irq, void *cookie)
+{
+	size_t *const len = 0;
+	char const *buf = babblenet_get_babble(len);
+	int count = (int)*len;
+
+	if (count > BABBLE_LEN)
+		count = BABBLE_LEN;
+
+	ret = 0;
+
+	while (!ret) {
+		attempts++;
+		ret = spin_trylock(&my_lock);
+	}
+	if (!ret) {
+		printk(KERN_INFO "Unable to hold lock");
+		return 0;
+	}
+
+	printk("Lock Acquired; Attempts: %d\n", attempts);
+	attempts = 0;
+	babble_size = count;
+
+	memset(BABBLE, 0, BABBLE_LEN);
+	cpyStr(BABBLE, buf, 140, count);
+
+	spin_unlock(&my_lock);
 
 	return IRQ_HANDLED;
-
 }
 
 /**
  * babbler_init() - entry point into the Babbler kernel driver
  * Return: 0 on successful initialization, negative on error
  */
-static int __init babbler_init(void)
-{
+static int __init babbler_init(void) {
 	int retval;
 
-	topics_buffer = vmalloc(PAGE_SIZE);
+	 topics_buffer = vmalloc(PAGE_SIZE);
+	 topics_buffer = (char *)vmalloc(1 * PAGE_SIZE);
+	 topics_buffer[9] = '\0';
+	 BABBLE = (char *)vmalloc(1 * PAGE_SIZE);
+	 BABBLE[140] = '\0';
+
+	 memset(topics_buffer, 0, TOPIC_LEN);
+	 memset(BABBLE, 0, 1 * BABBLE_LEN);
+
+	 babble_size = 0;
 	if (!topics_buffer) {
-		pr_err("Could not allocate memory\n");
+		pr_info("Failed to allocate memory for 1 topics Page\n");
+		return -ENOMEM;
+	}
+	if (!BABBLE) {
+		pr_info("Failed to allocate memory for 1 BABBLE Page\n");
 		return -ENOMEM;
 	}
 	memset(topics_buffer, 0, PAGE_SIZE);
+
 	retval = misc_register(&babbler_dev);
 	if (retval) {
 		pr_err("Could not register babbler\n");
@@ -375,19 +434,18 @@ static int __init babbler_init(void)
 	/*
 	 * In part 2, register ISR and enable network integration.
 	 */
-	
-	err =  request_threaded_irq(BABBLENET_IRQ,
-				    babblenet_top,
-				    babblenet_bottom,
-				    0,
-				    "babble_IRQ",
-				    NULL);
-	if(err){
+
+	err = request_threaded_irq(BABBLENET_IRQ,
+				   babblenet_top,
+				   babblenet_bottom, 0, "babble_IRQ", NULL);
+	babblenet_enable();
+
+	if (err) {
 		printk("Could not assign device IRQ at %d", BABBLENET_IRQ);
 		free_irq(BABBLENET_IRQ, NULL);
-		return err; /*PROPER ERROR HANDLING?!*/
+		return err;	/*PROPER ERROR HANDLING?! */
 	}
-	
+
 err_deregister_babbler:
 	misc_deregister(&babbler_dev);
 err_vfree:
@@ -399,12 +457,12 @@ err_vfree:
 /**
  * babbler_exit() - called by kernel to clean up resources
  */
-static void __exit babbler_exit(void)
-{
+static void __exit babbler_exit(void) {
 	/*
 	 * In part 2, disable network integration and remove the ISR.
 	 */
-	/* YOUR CODE HERE */
+	babblenet_disable();
+	free_irq(BABBLENET_IRQ, NULL);
 
 	/*
 	 * In part 3, free all memory associated with topics list.
@@ -414,10 +472,9 @@ static void __exit babbler_exit(void)
 	misc_deregister(&babbler_ctl_dev);
 	misc_deregister(&babbler_dev);
 	vfree(topics_buffer);
-}
-
-
-module_init(babbler_init);
+	vfree(BABBLE);
+	pr_info("Goodbye, world!\n");
+} module_init(babbler_init);
 module_exit(babbler_exit);
 
 MODULE_DESCRIPTION("CS421 Babbler driver - project 2");
