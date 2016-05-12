@@ -144,14 +144,16 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	while (!ret) {
 		attempts++;
 		ret = spin_trylock(&my_lock);
+		if(attempts > 20){
+			/*Lock shouldn't be held that long*/
+			free_irq(BABBLENET_IRQ, NULL);
+			babblenet_disable();
+			printk(KERN_INFO "Unable to hold lock");
+			break;
+		}		
 	}
 
-	if (!ret) {
-		printk(KERN_INFO "Unable to hold lock.");
-		return 0;
-	}
-
-	printk("Lock Acquired; Attempts: %d\n", attempts);
+	printk("Lock Acquired in Read; Attempts: %d\n", attempts);
 	attempts = 0;
 
 	overflow = (int)copy_to_user(ubuf, BABBLE, writeAmt);
@@ -189,13 +191,16 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 	while (!ret) {
 		attempts++;
 		ret = spin_trylock(&my_lock);
-	}
-	if (!ret) {
-		printk(KERN_INFO "Unable to hold lock");
-		return 0;
+		if(attempts > 20){
+			/*Lock shouldn't be held that long*/
+			free_irq(BABBLENET_IRQ, NULL);
+			babblenet_disable();
+			printk(KERN_INFO "Unable to hold lock");
+			break;
+		}		
 	}
 
-	printk("Lock Acquired; Attempts: %d\n", attempts);
+	printk("Lock Acquired in Write; Attempts: %d\n", attempts);
 	attempts = 0;
 	babble_size = count;
 
@@ -254,14 +259,22 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 	while (!ret) {
 		attempts++;
 		ret = spin_trylock(&my_lock);
+		if(attempts > 20){
+			/*Lock shouldn't be held that long*/
+			free_irq(BABBLENET_IRQ, NULL);
+			babblenet_disable();
+			printk(KERN_INFO "Unable to hold lock");
+			break;
+		}		
 	}
 
 	if (!ret) {
-		printk(KERN_INFO "Unable to hold lock.");
+
+		
 		return 0;
 	}
 
-	printk("Lock Acquired; Attempts: %d\n", attempts);
+	printk("Lock Acquired in Ctl Write; Attempts: %d\n", attempts);
 	attempts = 0;
 
 	memset(topics_buffer, 0, TOPIC_LEN);
@@ -374,13 +387,16 @@ static irqreturn_t babblenet_bottom(int irq, void *cookie)
 	while (!ret) {
 		attempts++;
 		ret = spin_trylock(&my_lock);
-	}
-	if (!ret) {
-		printk(KERN_INFO "Unable to hold lock");
-		return 0;
+		if(attempts > 20){
+			/*Lock shouldn't be held that long*/
+			free_irq(BABBLENET_IRQ, NULL);
+			babblenet_disable();
+			printk(KERN_INFO "Unable to hold lock");
+			break;
+		}		
 	}
 
-	printk("Lock Acquired; Attempts: %d\n", attempts);
+	printk("Lock Acquired in Bottom; Attempts: %d\n", attempts);
 	attempts = 0;
 	babble_size = count;
 
@@ -398,17 +414,17 @@ static irqreturn_t babblenet_bottom(int irq, void *cookie)
  */
 static int __init babbler_init(void) {
 	int retval;
+	
+	topics_buffer = vmalloc(PAGE_SIZE);
+	topics_buffer = (char *)vmalloc(1 * PAGE_SIZE);
+	topics_buffer[9] = '\0';
+	BABBLE = (char *)vmalloc(1 * PAGE_SIZE);
+	BABBLE[140] = '\0';
 
-	 topics_buffer = vmalloc(PAGE_SIZE);
-	 topics_buffer = (char *)vmalloc(1 * PAGE_SIZE);
-	 topics_buffer[9] = '\0';
-	 BABBLE = (char *)vmalloc(1 * PAGE_SIZE);
-	 BABBLE[140] = '\0';
+	memset(topics_buffer, 0, TOPIC_LEN);
+	memset(BABBLE, 0, 1 * BABBLE_LEN);
 
-	 memset(topics_buffer, 0, TOPIC_LEN);
-	 memset(BABBLE, 0, 1 * BABBLE_LEN);
-
-	 babble_size = 0;
+	babble_size = 0;
 	if (!topics_buffer) {
 		pr_info("Failed to allocate memory for 1 topics Page\n");
 		return -ENOMEM;
@@ -420,13 +436,13 @@ static int __init babbler_init(void) {
 	memset(topics_buffer, 0, PAGE_SIZE);
 
 	retval = misc_register(&babbler_dev);
-	if (retval) {
+	if (!retval) {
 		pr_err("Could not register babbler\n");
 		goto err_vfree;
 	}
 
 	retval = misc_register(&babbler_ctl_dev);
-	if (retval) {
+	if (!retval) {
 		pr_err("Could not register babbler_ctl\n");
 		goto err_deregister_babbler;
 	}
@@ -437,12 +453,20 @@ static int __init babbler_init(void) {
 
 	err = request_threaded_irq(BABBLENET_IRQ,
 				   babblenet_top,
-				   babblenet_bottom, 0, "babble_IRQ", NULL);
+				   babblenet_bottom, 
+				   0, 
+				   "babble_IRQ", 
+				   NULL);
 	babblenet_enable();
 
-	if (err) {
+	printk("Babbletnet init'd\n");
+
+	if (err < 0) {
 		printk("Could not assign device IRQ at %d", BABBLENET_IRQ);
 		free_irq(BABBLENET_IRQ, NULL);
+		babblenet_disable();
+		misc_deregister(&babbler_dev);
+		vfree(topics_buffer);
 		return err;	/*PROPER ERROR HANDLING?! */
 	}
 
