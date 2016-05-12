@@ -153,7 +153,7 @@ static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 	ret = 0;
 
 
-	while(!ret){
+	while (!ret){
 		attempts++;
 		ret = spin_trylock(&my_lock);
 	}
