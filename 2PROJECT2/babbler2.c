@@ -51,8 +51,6 @@ const int BYTE_SIZE = 8;
 static char *BABBLE;
 int writeAmt;
 static int overflow;
-int attempts;
-
 
 static DEFINE_SPINLOCK(my_lock);
 
@@ -128,11 +126,10 @@ extern const char *babblenet_get_babble(size_t * const);
 static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 			    size_t count, loff_t * ppos)
 {
+	int attempts = 0;
 	int ret = 0;
 	struct topics_list *find_entry;
 	struct list_head *pos, *n;
-
-	int attempts = 0;
 
 	unsigned int myUID = current_uid().val;
 
@@ -144,28 +141,11 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 	 */
 	/* YOUR CODE HERE */
 	writeAmt = (babble_size < count) ? babble_size : count;
-	if (strstr(BABBLE, topics_buffer) == NULL || babble_size == 0) {
-		pr_info("Topic not found in babble or no topic.\n");
-		while (!ret){
-			attempts++;
-			if (attempts > 20)
-				break;
-			ret = spin_trylock(&my_lock);			
-		}
-		memset(BABBLE, 0, BABBLE_LEN);
-		spin_unlock(&my_lock);
-		return 0;
-	}
-	if(!ret){
-		printk(KERN_INFO "Took too many cycles on babble clear.\n");
-		return -EDEADLK;
-	}
+
 	/*
 	 * In part 3, copy to the user if the babble contains any
 	 * topic of interest. If there are no topics, then return 0.
 	 */
-
-	ret = 0;
 
 	while (!ret) {
 		attempts++;
@@ -186,7 +166,7 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 		       find_entry->topic);
 		if(strstr(BABBLE, find_entry->topic) != NULL){
 			ret = copy_to_user(ubuf, BABBLE, writeAmt);
-			if(!ret){
+			if(ret != 0){
 				pr_err("Failed copying '%s' to user.\n", BABBLE);
 				pr_err("Fail on return was: %d.\n", ret);
 				spin_unlock(&my_lock);
@@ -222,6 +202,7 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 static ssize_t babbler_write(struct file *filp, const char __user * ubuf,
 			     size_t count, loff_t * ppos)
 {
+	int attempts = 0;
 	int ret;
 	if (count > BABBLE_LEN)
 		count = BABBLE_LEN;
@@ -284,6 +265,7 @@ static ssize_t babbler_ctl_write(struct file *filp, const char __user * ubuf,
 	 * contents of topics_buffer. Assume the user will never add a
 	 * topic that was already added.
 	 */
+	int attempts = 0;
 	int ret;
 	char octo = '#';
 	struct topics_list *entry = (struct topics_list *) kmalloc(sizeof(*entry), 0);
@@ -426,6 +408,7 @@ static irqreturn_t babblenet_top(int irq, void *cookie)
 static irqreturn_t babblenet_bottom(int irq, void *cookie)
 {
 	int ret;
+	int attempts = 0;
 	size_t len = 0;
 	int count = 0;	
 	char const *buf = babblenet_get_babble(&len);
