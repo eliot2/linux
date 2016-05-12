@@ -375,9 +375,13 @@ static irqreturn_t babblenet_top(int irq, void *cookie)
  */
 static irqreturn_t babblenet_bottom(int irq, void *cookie)
 {
-	size_t *const len = 0;
-	char const *buf = babblenet_get_babble(len);
-	int count = (int)*len;
+
+	size_t len = 0;
+	int count = 0;	
+	char const *buf = babblenet_get_babble(&len);
+	printk("TEST1\n");
+	count = (int)len;	
+	printk("TEST2\n");
 
 	if (count > BABBLE_LEN)
 		count = BABBLE_LEN;
@@ -478,7 +482,6 @@ err_vfree:
 	vfree(BABBLE);
 	vfree(topics_buffer);
 	return retval;
-
 }
 
 /**
