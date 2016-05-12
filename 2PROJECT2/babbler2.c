@@ -57,6 +57,13 @@ int err;
 
 static DEFINE_SPINLOCK(my_lock);
 
+struct topics_list {
+	char topic[9];
+	struct list_head list;
+};
+static struct list_head topics_head;
+static char *topics_ptr; 
+
 /**
  * cpyStr() - No return.
  * @to: cstring to copy to
@@ -379,9 +386,9 @@ static irqreturn_t babblenet_bottom(int irq, void *cookie)
 	size_t len = 0;
 	int count = 0;	
 	char const *buf = babblenet_get_babble(&len);
-	printk("TEST1\n");
+	
 	count = (int)len;	
-	printk("TEST2\n");
+	
 
 	if (count > BABBLE_LEN)
 		count = BABBLE_LEN;

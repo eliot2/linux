@@ -1,6 +1,6 @@
 /*  Name: Eliot Carney-Seim
     Project: Project 2
-    Description: Testing edge cases and mmap.
+    Description: Testing edge cases and mmap. 
 */
 
 #define _POSIX_SOURCE
