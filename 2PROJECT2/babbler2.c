@@ -436,13 +436,13 @@ static int __init babbler_init(void) {
 	memset(topics_buffer, 0, PAGE_SIZE);
 
 	retval = misc_register(&babbler_dev);
-	if (!retval) {
+	if (retval) {
 		pr_err("Could not register babbler\n");
 		goto err_vfree;
 	}
 
 	retval = misc_register(&babbler_ctl_dev);
-	if (!retval) {
+	if (retval) {
 		pr_err("Could not register babbler_ctl\n");
 		goto err_deregister_babbler;
 	}
@@ -470,9 +470,12 @@ static int __init babbler_init(void) {
 		return err;	/*PROPER ERROR HANDLING?! */
 	}
 
+	return 0;
+
 err_deregister_babbler:
 	misc_deregister(&babbler_dev);
 err_vfree:
+	vfree(BABBLE);
 	vfree(topics_buffer);
 	return retval;
 
