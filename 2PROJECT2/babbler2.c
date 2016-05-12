@@ -33,12 +33,15 @@
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/kthread.h>	/* for threads */
 #include <linux/sched.h>	/* for task_struct */
 #include <asm/uaccess.h>
 #include <linux/cred.h>
+#include <linux/errno.h>
+
 
 #define MAX_TOPIC_LEN 8
 #define MAX_BABBLE_LEN 140
@@ -96,7 +99,10 @@ extern const char *babblenet_get_babble(size_t * const);
 /**
  * babbler_read() - callback invoked when a process reads from
  * /dev/babbler
+ * @filp: process's file object that is reading from this device (ignored)
  * @ubuf: destination to store babble
+ * @count: number of bytes in @ubuf
+ * @ppos: file offset (ignored)
  *
  * If the most recent babble begins with an '@' character followed by
  * an integer, the babble is requesting privacy. If the calling uid
@@ -126,21 +132,56 @@ extern const char *babblenet_get_babble(size_t * const);
 static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 			    size_t count, loff_t * ppos)
 {
+	
 	int attempts = 0;
 	int ret = 0;
 	struct topics_list *find_entry;
 	struct list_head *pos, *n;
 
-	unsigned int myUID = current_uid().val;
+	long myUID = (long)current_uid().val;
+	long foundUID;
+	char * spacePtr;
 
-	int somethingFound = 0;
-	
+	int somethingFound = 0;	
+
 	/*
 	 * In part 4, if the babble's privacy option does not match
 	 * the current user, then return 0.
 	 */
-	/* YOUR CODE HERE */
-	writeAmt = (babble_size < count) ? babble_size : count;
+	/* Modification to Babble made here, so must get lock*/	
+	while (!ret) {
+		attempts++;
+		ret = spin_trylock(&my_lock);
+		if(attempts > 20){
+			/*Lock shouldn't be held that long*/
+			printk(KERN_INFO "Unable to hold lock");
+			return -EDEADLK;
+		}		
+	}
+	
+
+	if(BABBLE[0] == '@'){
+		spacePtr = strstr(BABBLE, " \0");
+		if(spacePtr == NULL){
+			pr_err("@ used, but no space delimiter found.\n");
+			return 0;
+		}
+		*spacePtr = '\0';
+		ret = kstrtol(BABBLE + 1, 10, &foundUID);
+		*spacePtr = ' ';
+		if(ret != 0){
+			pr_err("Error %d | Converting UID to long.\n", ret);
+			return ret;
+		}
+		if(foundUID != myUID){
+			pr_err("My UID %ld doesn't match Babbe %ld", 
+			       myUID,
+			       foundUID);
+			return 0;
+		}		
+	}
+	ret = 0;
+	spin_unlock(&my_lock);	
 
 	/*
 	 * In part 3, copy to the user if the babble contains any
@@ -159,12 +200,14 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 
 	printk("Lock Acquired in Read; Attempts: %d\n", attempts);
 	attempts = 0;
+	writeAmt = (babble_size < count) ? babble_size : count;
 
 	list_for_each_safe(pos, n, &topics_head) { 
 		find_entry = list_entry(pos, struct topics_list, list);
 		printk(KERN_INFO "Testing find: %s | against | %s\n", BABBLE,
 		       find_entry->topic);
 		if(strstr(BABBLE, find_entry->topic) != NULL){
+			printk(KERN_INFO "Match!\n");
 			ret = copy_to_user(ubuf, BABBLE, writeAmt);
 			if(ret != 0){
 				pr_err("Failed copying '%s' to user.\n", BABBLE);
@@ -187,10 +230,12 @@ static ssize_t babbler_read(struct file *filp, char __user * ubuf,
 }
 
 /**
- * babbler_write() - helper invoked when a process writes to
+ * babbler_write() - callback invoked when a process writes to
  * /dev/babbler
+ * @filp: process's file object that is writing to this device (ignored)
  * @ubuf: source buffer of bytes from user
- * @: number of bytes in @ubuf
+ * @count: number of bytes in @ubuf
+ * @ppos: file offset (ignored)
  *
  * Copy the contents of @ubuf, up to @count bytes, to the current
  * babble buffer, overwriting any previously stored babbles. If @count
